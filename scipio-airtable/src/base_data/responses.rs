@@ -29,3 +29,7 @@ pub struct ListRecordsResponse<T> {
 }
 
 pub type GetRecordResponse<T> = Record<T>;
+
+pub type UpdateRecordResponse<T> = Record<T>;
+
+pub type UpdateMultipleRecordsResponse<T> = Vec<Record<T>>;

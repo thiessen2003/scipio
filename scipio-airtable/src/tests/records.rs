@@ -84,3 +84,139 @@ pub async fn test_update_record(context: AsyncTestContext) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(feature = "integration")]
+#[rstest]
+#[traced_test]
+#[tokio::test]
+pub async fn test_update_record(context: AsyncTestContext) -> Result<()> {
+    let mut cleanup = context.cleanup.lock().await;
+    let airtable = context.airtable.clone();
+    
+    cleanup.push(Box::new(move || {
+        let airtable = airtable.clone();
+        Box::pin(async move {
+            tracing::info!("Cleaning up test_update_record");
+            Ok(())
+        })
+    }));
+
+    let base = env::var("TEST_AIRTABLE_API_BASE").expect("missing TEST_AIRTABLE_BASE variable");
+    let table = env::var("TEST_AIRTABLE_API_TABLE").expect("missing TEST_AIRTABLE_TABLE variable");
+    let record_id = env::var("TEST_AIRTABLE_API_RECORD_ID")
+        .expect("missing TEST_AIRTABLE_RECORD_ID variable");
+
+    // Create test data
+    let update_data = UpdateRecordPayload {
+        fields: Customer {
+            // Add your test customer fields here
+            name: "Updated Test Customer".to_string(),
+            // ... other fields
+        },
+    };
+
+    // Test PATCH update
+    let patch_result = context
+        .airtable
+        .update_record(&base, &table, &record_id, update_data.clone(), UpdateMethod::Patch)
+        .await?;
+    
+    assert!(patch_result.id.len() > 0);
+    assert_eq!(patch_result.fields.name, "Updated Test Customer");
+
+    // Test PUT update
+    let put_result = context
+        .airtable
+        .update_record(&base, &table, &record_id, update_data, UpdateMethod::Put)
+        .await?;
+    
+    assert!(put_result.id.len() > 0);
+    assert_eq!(put_result.fields.name, "Updated Test Customer");
+
+    Ok(())
+}
+
+#[cfg(feature = "integration")]
+#[rstest]
+#[traced_test]
+#[tokio::test]
+pub async fn test_update_multiple_records(context: AsyncTestContext) -> Result<()> {
+    let mut cleanup = context.cleanup.lock().await;
+    let airtable = context.airtable.clone();
+    
+    cleanup.push(Box::new(move || {
+        let airtable = airtable.clone();
+        Box::pin(async move {
+            tracing::info!("Cleaning up test_update_multiple_records");
+            Ok(())
+        })
+    }));
+
+    let base = env::var("TEST_AIRTABLE_API_BASE").expect("missing TEST_AIRTABLE_BASE variable");
+    let table = env::var("TEST_AIRTABLE_API_TABLE").expect("missing TEST_AIRTABLE_TABLE variable");
+
+    // Create test data for multiple records
+    let records = vec![
+        UpdateRecordPayload {
+            fields: Customer {
+                name: "Batch Update Customer 1".to_string(),
+                // ... other fields
+            },
+        },
+        UpdateRecordPayload {
+            fields: Customer {
+                name: "Batch Update Customer 2".to_string(),
+                // ... other fields
+            },
+        },
+    ];
+
+    let update_data = UpdateMultipleRecordsPayload {
+        records,
+        typecast: Some(false),
+    };
+
+    // Test PATCH update for multiple records
+    let patch_result = context
+        .airtable
+        .update_multiple_records(&base, &table, update_data.clone(), UpdateMethod::Patch)
+        .await?;
+    
+    assert_eq!(patch_result.records.len(), 2);
+    assert!(patch_result.records[0].id.len() > 0);
+    assert!(patch_result.records[1].id.len() > 0);
+    assert_eq!(patch_result.records[0].fields.name, "Batch Update Customer 1");
+    assert_eq!(patch_result.records[1].fields.name, "Batch Update Customer 2");
+
+    // Test PUT update for multiple records
+    let put_result = context
+        .airtable
+        .update_multiple_records(&base, &table, update_data, UpdateMethod::Put)
+        .await?;
+    
+    assert_eq!(put_result.records.len(), 2);
+    assert!(put_result.records[0].id.len() > 0);
+    assert!(put_result.records[1].id.len() > 0);
+    assert_eq!(put_result.records[0].fields.name, "Batch Update Customer 1");
+    assert_eq!(put_result.records[1].fields.name, "Batch Update Customer 2");
+
+    Ok(())
+}
+
+// Helper structs that you'll need to define if not already present
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateRecordPayload<T> {
+    pub fields: T,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateMultipleRecordsPayload<T> {
+    pub records: Vec<UpdateRecordPayload<T>>,
+    pub typecast: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UpdateMethod {
+    Patch,
+    Put,
+}

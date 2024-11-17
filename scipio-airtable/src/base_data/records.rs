@@ -6,7 +6,7 @@ use derive_more::derive::Display;
 use scipio_macros::ToQueryString;
 use serde::{Deserialize, Serialize};
 
-use super::responses::{GetRecordResponse, ListRecordsResponse};
+use super::responses::{GetRecordResponse, ListRecordsResponse, UpdateRecordResponse, UpdateMultipleRecordsResponse};
 use crate::Airtable;
 
 /// A struct representing a sort query parameter.
@@ -17,6 +17,19 @@ use crate::Airtable;
 pub struct Sort {
     pub field: String,
     pub direction: String,
+}
+
+#[derive(Debug)]
+pub enum UpdateMethod {
+    Patch, 
+    Put
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateRecordPayload<T> {
+    pub return_fields_by_field_id: Option<bool>,
+    pub typecast: Option<bool>, 
+    pub fields: T
 }
 
 impl Display for Sort {
@@ -122,15 +135,56 @@ impl Airtable {
     }
 
     pub async fn update_record<T>(
-        &self,
+        &self, 
         base_id: &str,
         table_id: &str,
         record_id: &str,
-        data: T,
-    ) -> Result<()>
-    where
-        T: for<'de> Deserialize<'de>,
+        data: UpdateRecordPayload<T>,
+        method: UpdateMethod
+    ) -> Result<GetRecordResponse<T>> 
+    where T: for<'de> Deserialize<'de> + Serialize, 
     {
-        Ok(())
+        let url: String = format!(
+            "https://api.airtable.com/v0/{base_id}/{table_id}/{record_id}",
+        );
+
+        let json_data = serde_json::to_string(&data)?;
+
+
+        let result = match method {
+            UpdateMethod::Patch => self.http.patch(&url).body(json_data).send().await?.json::<UpdateRecordResponse<T>>().await?,
+            UpdateMethod::Put => self.http.put(&url).body(json_data).send().await?.json::<UpdateRecordResponse<T>>().await?
+        };
+
+        
+        Ok(result)
     }
+
+    pub async fn update_multiple_records<T>(
+        &self,
+        base_id: &str, 
+        table_id: &str, 
+        data: T, 
+        method: UpdateMultipleRecordsPayload<T>
+    ) -> Result<UpdateMultipleRecordsResponse<T>> 
+    
+    where T: for<'de> Deserialize<'de> + Serialize 
+    {
+        
+        let url: String = format!(
+            "https://api.airtable.com/v0/{base_id}/{table_id}/{record_id}",
+        );
+
+        let json_data = serde_json::to_string(&data)?;
+
+        let result = match method { 
+            UpdateMethod::Patch => self.http.patch(&url).body(json_data).send().await?.json::<UpdateMultipleRecordsResponse<T>>().await?,
+            UpdateMethod::Put => self.http.put(&url).body(json_data).send().await?.json::<UpdateMultipleRecordsResponse<T>>().await?
+        }; 
+
+        Ok(result)
+
+    }
+
+
 }
